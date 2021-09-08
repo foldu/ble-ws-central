@@ -40,6 +40,7 @@
     in
     {
       defaultPackage = pkgs.ble-ws-central;
+      nixosModule = import ./nix/module.nix;
       defaultApp = {
         type = "app";
         program = "${self.defaultPackage.${system}}/bin/ble-ws-central";
