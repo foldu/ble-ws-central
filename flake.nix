@@ -33,6 +33,7 @@
           ];
         };
     };
+    nixosModule = import ./nix/module.nix;
   } // flake-utils.lib.eachDefaultSystem (
     system:
     let
@@ -40,7 +41,6 @@
     in
     {
       defaultPackage = pkgs.ble-ws-central;
-      nixosModule = import ./nix/module.nix;
       defaultApp = {
         type = "app";
         program = "${self.defaultPackage.${system}}/bin/ble-ws-central";
