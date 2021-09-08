@@ -1,6 +1,5 @@
 use directories_next::ProjectDirs;
 use eyre::Context;
-use once_cell::sync::Lazy;
 use rand::{distributions, prelude::*, rngs::OsRng};
 use std::{
     fs,
@@ -22,8 +21,8 @@ struct EnvConfig {
     pub host: IpAddr,
     #[serde(default = "default_port")]
     pub port: u16,
-    #[serde(default = "default_db_path")]
-    pub db_path: PathBuf,
+    #[serde(default = "default_data_dir")]
+    pub data_dir: PathBuf,
     pub demo: Option<NonZeroU8>,
     pub token: Option<String>,
 }
@@ -40,16 +39,12 @@ fn default_port() -> u16 {
     8080
 }
 
-static DATA_DIR: Lazy<PathBuf> = Lazy::new(|| {
+fn default_data_dir() -> PathBuf {
     ProjectDirs::from("org", "foldu", env!("CARGO_PKG_NAME"))
         .ok_or_else(|| eyre::format_err!("Could not get project directories"))
         .unwrap()
         .data_dir()
         .to_owned()
-});
-
-fn default_db_path() -> PathBuf {
-    DATA_DIR.join(concat!(env!("CARGO_PKG_NAME"), ".mdb"))
 }
 
 pub(crate) struct Config {
@@ -91,7 +86,7 @@ impl Config {
             mqtt::ConnectOptions::new(&url, ssl).map_err(|e| e.into())
         }).transpose()?;
 
-        let token_path = DATA_DIR.join("token");
+        let token_path = env_config.data_dir.join("token");
         let token = match env_config.token {
             Some(token) => token,
             None => match std::fs::read_to_string(&token_path) {
@@ -140,12 +135,15 @@ impl Config {
             .map_err(|_| eyre::format_err!("Corrupted token file {}", token_path.display()))?;
         token.set_sensitive(true);
 
+        let db_path = env_config
+            .data_dir
+            .join(concat!(env!("CARGO_PKG_NAME"), ".mdb"));
         Ok(Self {
             mqtt_options,
             enable_mesh: env_config.enable_mesh,
             host: env_config.host,
             port: env_config.port,
-            db_path: env_config.db_path,
+            db_path,
             demo: env_config.demo,
             token,
         })
