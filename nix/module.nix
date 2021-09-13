@@ -75,6 +75,11 @@ in
       isSystemUser = true;
       group = cfg.group;
     };
+    hardware.bluetooth = {
+      enable = true;
+      powerOnBoot = false;
+    };
+    systemd.services.bluetooth-mesh.aliases = [ "dbus-org.bluez.mesh.service" ];
     systemd.services.ble-ws-central = {
       enable = true;
       wants = [ "bluetooth-mesh.service" ];
