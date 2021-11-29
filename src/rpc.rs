@@ -2,14 +2,14 @@ use crate::{db::IdDbEntry, sensor::SensorState};
 use ble_ws_api::{
     data::Timestamp,
     proto::{
-        self, ble_weatherstation_service_server::BleWeatherstationService, ChangeLabelRequest,
-        ChangeLabelResponse, OverviewRequest, OverviewResponse, OverviewResponseField,
-        SensorDataRequest, SensorDataResponse, SubscribeToChangesRequest,
+        self, ble_weatherstation_service_server::BleWeatherstationService, BackupRequest,
+        BackupResponse, ChangeLabelRequest, ChangeLabelResponse, OverviewRequest, OverviewResponse,
+        OverviewResponseField, SensorDataRequest, SensorDataResponse, SubscribeToChangesRequest,
     },
 };
 use futures_util::stream::TryStreamExt;
-use std::sync::Arc;
-use tokio_stream::wrappers::BroadcastStream;
+use std::{num::NonZeroUsize, sync::Arc};
+use tokio_stream::wrappers::{BroadcastStream, ReceiverStream};
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
 
@@ -21,6 +21,11 @@ impl From<crate::db::Error> for Status {
 
 #[derive(derive_more::Deref, derive_more::Constructor)]
 pub(crate) struct Server(Arc<crate::Context>);
+
+type GenericStream<T> =
+    Box<dyn futures_util::Stream<Item = Result<T, Status>> + Send + Sync + Unpin>;
+
+const CHUNKSIZE: NonZeroUsize = nonzero_ext::nonzero!(8192usize);
 
 #[tonic::async_trait]
 impl BleWeatherstationService for Server {
@@ -35,7 +40,10 @@ impl BleWeatherstationService for Server {
             Timestamp::from(req.start)..Timestamp::from(req.end)
         };
         let txn = self.db.read_txn()?;
-        match self.db.get_log(&txn, Uuid::from(req.id.unwrap()), range)? {
+        match self
+            .db
+            .get_log(&txn, Uuid::from(req.id.unwrap()), range, Default::default())?
+        {
             None => Err(Status::not_found("Sensor never existed")),
             Some(log) => Ok(Response::new(log)),
         }
@@ -81,6 +89,7 @@ impl BleWeatherstationService for Server {
     type SubscribeToChangesStream = Box<
         dyn futures_util::Stream<Item = Result<OverviewResponse, Status>> + Send + Sync + Unpin,
     >;
+    type BackupStream = GenericStream<BackupResponse>;
 
     async fn subscribe_to_changes(
         &self,
@@ -132,6 +141,55 @@ impl BleWeatherstationService for Server {
             .await;
 
         Ok(Response::new(ChangeLabelResponse {}))
+    }
+
+    async fn backup(
+        &self,
+        _req: Request<BackupRequest>,
+    ) -> Result<Response<Self::BackupStream>, Status> {
+        let ctx = self.0.clone();
+        let (tx, rx) = tokio::sync::mpsc::channel::<Result<BackupResponse, ()>>(1);
+        tokio::task::spawn_blocking(move || {
+            // FIXME: timeout after some time if request takes too long
+            // and release db lock
+            let txn = ctx.db.read_txn().unwrap();
+            for uuid in ctx.db.known_addrs(&txn).unwrap() {
+                if let Ok(uuid) = uuid {
+                    let mut start = Timestamp::from(0);
+                    loop {
+                        let resp = ctx
+                            .db
+                            .get_log(
+                                &txn,
+                                uuid,
+                                start..Timestamp::from(u32::MAX),
+                                Some(CHUNKSIZE),
+                            )
+                            .unwrap();
+                        let resp = match resp {
+                            Some(resp) => resp,
+                            _ => break,
+                        };
+                        if let Some(last) = resp.time.last() {
+                            start = Timestamp::from(
+                                u32::from(*last).checked_add(1).expect("Timestamp overflow"),
+                            );
+                            if let Err(_) = tx.blocking_send(Ok(BackupResponse {
+                                id: Some(ble_ws_api::proto::Uuid::from(uuid)),
+                                chunk: Some(resp),
+                            })) {
+                                return;
+                            }
+                        } else {
+                            break;
+                        }
+                    }
+                }
+            }
+        });
+        Ok(Response::new(Box::new(
+            ReceiverStream::new(rx).map_err(|_| Status::internal("tx dropped")),
+        )))
     }
 }
 

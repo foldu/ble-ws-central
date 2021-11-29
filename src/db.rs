@@ -8,6 +8,7 @@ use heed::{
 use std::{
     collections::BTreeMap,
     fs,
+    num::NonZeroUsize,
     ops::Range,
     path::{Path, PathBuf},
     sync::{RwLock, RwLockReadGuard},
@@ -164,6 +165,7 @@ impl Db {
         txn: &RoTxn<'_, T>,
         id: Uuid,
         range: Range<Timestamp>,
+        limit: Option<NonZeroUsize>,
     ) -> Result<Option<ble_ws_api::proto::SensorDataResponse>, Error> {
         let sensor_log = self.sensor_log.read().unwrap();
         let id = DbUuid::from(id);
@@ -174,8 +176,9 @@ impl Db {
 
         let range = LEU32::new(range.start.as_u32())..LEU32::new(range.end.as_u32());
 
+        let limit = limit.unwrap_or(NonZeroUsize::new(usize::MAX).unwrap());
         let mut data = ble_ws_api::proto::SensorDataResponse::default();
-        for val in db.range(txn, &range)? {
+        for val in db.range(txn, &range)?.take(limit.get()) {
             let (time, values) = val?;
             data.time.push(time.get());
             data.temperature.push(values.temperature as i32);

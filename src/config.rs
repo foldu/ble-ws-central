@@ -36,7 +36,7 @@ fn default_host() -> IpAddr {
 }
 
 fn default_port() -> u16 {
-    8080
+    5841
 }
 
 fn default_data_dir() -> PathBuf {

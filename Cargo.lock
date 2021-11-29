@@ -180,7 +180,6 @@ checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
 [[package]]
 name = "ble-ws-api"
 version = "0.1.0"
-source = "git+https://github.com/foldu/ble-ws-api#4735624633c4a0bcfc78205be41006cc6aa50fba"
 dependencies = [
  "bytemuck",
  "prost",
@@ -213,6 +212,7 @@ dependencies = [
  "mqtt-protocol 0.11.0",
  "nix 0.22.0",
  "nom",
+ "nonzero_ext",
  "num_enum",
  "once_cell",
  "rand",
@@ -1009,6 +1009,12 @@ dependencies = [
  "minimal-lexical",
  "version_check",
 ]
+
+[[package]]
+name = "nonzero_ext"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "38bf9645c8b145698bb0b18a4637dcacbc421ea49bef2317e4fd8065a387cf21"
 
 [[package]]
 name = "ntapi"

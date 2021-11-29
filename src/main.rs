@@ -5,6 +5,7 @@ mod mesh;
 mod opt;
 mod rpc;
 mod sensor;
+mod supervisor;
 mod tasks;
 mod util;
 
