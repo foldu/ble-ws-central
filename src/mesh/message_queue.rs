@@ -77,7 +77,7 @@ impl GenericMessage {
                 received,
                 kind: MessageKind::Normal,
                 content: msg,
-            }
+            },
         }
     }
 }
@@ -149,7 +149,11 @@ impl State {
         false
     }
 
-    async fn try_pull_many(&mut self, tx: &mut mpsc::Sender<GenericMessage>, filter: &GenericFilter) {
+    async fn try_pull_many(
+        &mut self,
+        tx: &mut mpsc::Sender<GenericMessage>,
+        filter: &GenericFilter,
+    ) {
         // NOTE: borrows self.messages, so need to buffer
         let indexes = iter_filter(filter, &self.messages).collect::<Vec<_>>();
         for index in indexes {
@@ -345,11 +349,9 @@ impl MessageQueue {
         Some((addr, ret))
     }
 
-    pub async fn subscribe<F>(
-        &self,
-        filter: F,
-    ) -> mpsc::Receiver<GenericMessage>
-    where F: Into<GenericFilter>,
+    pub async fn subscribe<F>(&self, filter: F) -> mpsc::Receiver<GenericMessage>
+    where
+        F: Into<GenericFilter>,
     {
         let (tx, rx) = mpsc::channel(1);
         let filter = filter.into();
